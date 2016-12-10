@@ -1,0 +1,2 @@
+include ':app', ':flironesdk'
+include ':openCVLibrary310'
