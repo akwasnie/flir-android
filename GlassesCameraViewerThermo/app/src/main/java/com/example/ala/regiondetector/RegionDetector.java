@@ -1,5 +1,8 @@
 package com.example.ala.regiondetector;
 
+import android.graphics.Bitmap;
+import android.util.Log;
+
 import com.example.ala.config.ColorSpace;
 import com.example.ala.config.Config;
 import com.example.ala.eventaggregator.Event;
@@ -7,7 +10,10 @@ import com.example.ala.eventaggregator.EventAggregator;
 import com.example.ala.eventaggregator.EventListener;
 import com.example.ala.utils.ColorUtil;
 
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
+import org.opencv.core.CvException;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Rect;
@@ -37,6 +43,7 @@ public class RegionDetector implements EventListener {
         this.eventAggregator = eventAggregator;
         eventAggregator.addEventListener(Event.NEW_IMAGE, this);
         eventAggregator.addEventListener(Event.VISIBLE_CASCADES, this);
+        eventAggregator.addEventListener(Event.NEW_IMAGE_THERMO, this);
     }
 
     @Override
@@ -51,11 +58,23 @@ public class RegionDetector implements EventListener {
             if (Config.GetColorSpace() == ColorSpace.YUV) {
                 mat = ColorUtil.RGBtoYUV(mat);
             }
-//            mat = ColorUtil.RGBtoYUV(mat);
-//            mat = ColorUtil.YUVtoRGB(mat);
 
             eventAggregator.triggerEvent(Event.PROCESSED_IMAGE, mat, null);
+        } else if (event == Event.NEW_IMAGE_THERMO) {
+            Bitmap bmp = (Bitmap) parameter;
+
+            Mat mat = new Mat (bmp.getHeight(), bmp.getWidth(), CvType.CV_8UC1);
+            Utils.bitmapToMat(bmp, mat);
+
+           // mat = detectRegion(mat, faceCascade, "face");
+           // mat = detectRegion(mat, eyeCascade, "eyes");
+
+            Bitmap resultedBmp = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888);
+            Utils.matToBitmap(mat, resultedBmp);
+
+            eventAggregator.triggerEvent(Event.PROCESSED_THERMO_IMAGE, resultedBmp, null);
         }
+
     }
 
     private Mat detectRegion(Mat mat, CascadeClassifier cascade, String region) {
@@ -103,9 +122,7 @@ public class RegionDetector implements EventListener {
 
         if (region.equals("face")) {
             avg = ColorUtil.AverageForRect(mat, rect, Config.GetChannel());
-            this.listAvg.add(avg);
-            List<Double> tail = this.listAvg.subList(Math.max(this.listAvg.size() - 100, 0), this.listAvg.size());
-            eventAggregator.triggerEvent(Event.TAIL_TO_DRAW, tail, null);
+            eventAggregator.triggerEvent(Event.TAIL_TO_DRAW, avg, null);
             eventAggregator.triggerEvent(Event.NEW_FACE_DETECTED, rect, null);
         } else if (region.equals("eyes")) {
             rect = new Rect(rect.x, rect.y - 2 * rect.height, rect.width, rect.height);
@@ -137,7 +154,6 @@ public class RegionDetector implements EventListener {
         Spectrum spectrum = new Spectrum(avgVector[0].clone(), fs, 2, avgVector[0].length);
 
         double eR_sp= SignalParameters.getPulse(spectrum.getFreqResponse(), fs, spectrum.getN());
-        System.out.println("aaaaaaaaaaaaaaaaaaa"+eR_sp);
 
         double[] y = new double[avgVector[0].length];
         y= FilterUsingCoeff.filter(avgVector[0], fs, fg, poles, false);

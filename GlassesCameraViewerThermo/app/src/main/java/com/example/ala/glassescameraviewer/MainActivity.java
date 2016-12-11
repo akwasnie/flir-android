@@ -41,6 +41,7 @@ import com.example.ala.regiondetector.RegionDetector;
 import com.example.ala.utils.ColorUtil;
 import com.example.ala.utils.FrameUtil;
 import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.Viewport;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
@@ -83,6 +84,23 @@ import com.flir.flironesdk.SimulatedDevice;
 
 public class MainActivity extends AppCompatActivity implements EventListener, CameraBridgeViewBase.CvCameraViewListener, Device.Delegate, FrameProcessor.Delegate, Device.StreamDelegate, Device.PowerUpdateDelegate{
 
+    /**
+     * Whether or not the system UI should be auto-hidden after
+     * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
+     */
+    private static final boolean AUTO_HIDE = true;
+    /**
+     * If {@link #AUTO_HIDE} is set, the number of milliseconds to wait after
+     * user interaction before hiding the system UI.
+     */
+    private static final int AUTO_HIDE_DELAY_MILLIS = 3000;
+    /**
+     * If set, will toggle the system UI visibility upon interaction. Otherwise,
+     * will show the system UI visibility upon interaction.
+     */
+    private static final boolean TOGGLE_ON_CLICK = true;
+    // Flir One.
+    ImageView thermalImageView;
     private FaceView mFaceView;
     private GraphView graph;
     private TextView textView;
@@ -95,31 +113,43 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
     private Button buttonch2;
     private Button buttonch3;
     private Button buttonConfig;
-
     private EventAggregator eventAggregator;
     private CascadeClassifier faceCascadeClassifier;
     private CascadeClassifier eyeCascadeClassifier;
-
+    public BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+        @Override
+        public void onManagerConnected(int status) {
+            switch (status) {
+                case LoaderCallbackInterface.SUCCESS:
+                {
+                    loadCascades();
+                    mOpenCvCameraView.enableView();
+                    mOpenCvCameraView.setAlpha(0);
+                } break;
+                default:
+                {
+                    super.onManagerConnected(status);
+                } break;
+            }
+        }
+    };
     private double heightProportion = 0.6;
     private double widthProportion = 0.3;
     private String tooFarMsg = "Move closer";
-
-    // Flir One.
-    ImageView thermalImageView;
+    private int lastX = 0;
+    private LineGraphSeries<DataPoint> series;
     private volatile boolean imageCaptureRequested = false;
     private volatile Socket streamSocket = null;
     private boolean chargeCableIsConnected = true;
-
     private int deviceRotation= 0;
     private OrientationEventListener orientationEventListener;
-
-
     private volatile Device flirOneDevice;
     private FrameProcessor frameProcessor;
-
     private String lastSavedPath;
-
     private Device.TuningState currentTuningState = Device.TuningState.Unknown;
+    private Bitmap thermo_frame;
+    private Bitmap thermalBitmap = null;
+    private ColorFilter originalChargingIndicatorColor = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -193,11 +223,22 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
         eventAggregator.addEventListener(Event.NEW_FACE_DETECTED, this);
         eventAggregator.addEventListener(Event.TAIL_TO_DRAW, this);
         eventAggregator.addEventListener(Event.NEW_PULSE, this);
+        eventAggregator.addEventListener(Event.PROCESSED_THERMO_IMAGE, this);
 
         regionDetector = new RegionDetector(eventAggregator);
 
 
         graph = (GraphView) findViewById(R.id.graphView1);
+        series = new LineGraphSeries<>(new DataPoint[] {});
+        graph.addSeries(series);
+        Viewport viewport = graph.getViewport();
+        viewport.setXAxisBoundsManual(true);
+        viewport.setYAxisBoundsManual(true);
+        viewport.setMinX(0);
+        viewport.setMaxX(60);
+        viewport.setMinY(0);
+        viewport.setMaxY(300);
+        viewport.setScrollable(true);
 
         buttonConfig = (Button) findViewById(R.id.config);
 
@@ -239,28 +280,11 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
 
     }
 
-    public BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
-        @Override
-        public void onManagerConnected(int status) {
-            switch (status) {
-                case LoaderCallbackInterface.SUCCESS:
-                {
-                    loadCascades();
-                    mOpenCvCameraView.enableView();
-                    mOpenCvCameraView.setAlpha(0);
-                } break;
-                default:
-                {
-                    super.onManagerConnected(status);
-                } break;
-            }
-        }
-    };
-
     private void loadCascades() {
         faceCascadeClassifier = initializeOpenCVDependencies(R.raw.lbpcascade_frontalface, "lbpcascade_frontalface.xml");
         eyeCascadeClassifier = initializeOpenCVDependencies(R.raw.haarcascade_mcs_eyepair_big, "haarcascade_mcs_eyepair_big.xml");
         eventAggregator.triggerEvent(Event.VISIBLE_CASCADES, faceCascadeClassifier, eyeCascadeClassifier);
+
     }
 
     private CascadeClassifier initializeOpenCVDependencies(int i, String name) {
@@ -312,24 +336,24 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
            setDistanceMsg((Rect) parameter);
        }
         else if (event==Event.TAIL_TO_DRAW){
-           drawGraph((List<Double>)parameter);
+           drawGraph((double)parameter);
        }
         else if(event==Event.NEW_PULSE){
            setPulseMsg((Double)parameter);
        }
+       else if(event==Event.PROCESSED_THERMO_IMAGE){
+           thermo_frame = (Bitmap)parameter;
+       }
 
     }
 
-    private void drawGraph(final List<Double> listOfColorsValues) {
-        final LineGraphSeries<DataPoint> series = new LineGraphSeries<>(new DataPoint[] {});
+    private void drawGraph(final double colorValue) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                for(int i=0; i<listOfColorsValues.size(); i++){
-                    DataPoint dp = new DataPoint(i, listOfColorsValues.get(i));
-                    series.appendData(dp, true, listOfColorsValues.size());
-
-                }
+                    DataPoint dp = new DataPoint(lastX, colorValue);
+                    series.appendData(dp, true, 60);
+                lastX ++;
                 graph.addSeries(series);
             }
         });
@@ -453,13 +477,15 @@ textPulse.setText(pulseMsg);
         flirOneDevice = null;
         orientationEventListener.disable();
     }
+
     private void updateThermalImageView(final Bitmap frame){
+        eventAggregator.triggerEvent(Event.NEW_IMAGE_THERMO, frame, null);
+        final Bitmap imageToPresent = thermo_frame;
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-
                 thermalImageView.setRotation(-90);
-                thermalImageView.setImageBitmap(frame);
+                thermalImageView.setImageBitmap(imageToPresent);
             }
         });
     }
@@ -471,8 +497,6 @@ textPulse.setText(pulseMsg);
             frameProcessor.processFrame(frame);
         }
     }
-
-    private Bitmap thermalBitmap = null;
 
     // Frame Processor Delegate method, will be called each time a rendered frame is produced
     public void onFrameProcessed(final RenderedImage renderedImage) {
@@ -626,6 +650,7 @@ textPulse.setText(pulseMsg);
 
         }
     }
+
         @Override
         protected void onStart(){
 
@@ -644,7 +669,6 @@ textPulse.setText(pulseMsg);
             }
         }
 
-    private ColorFilter originalChargingIndicatorColor = null;
     @Override
     public void onBatteryChargingStateReceived(final Device.BatteryChargingState batteryChargingState) {
         Log.i("ExampleApp", "Battery charging state received!");
@@ -654,25 +678,6 @@ textPulse.setText(pulseMsg);
     public void onBatteryPercentageReceived(byte b) {
 
     }
-
-    /**
-     * Whether or not the system UI should be auto-hidden after
-     * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
-     */
-    private static final boolean AUTO_HIDE = true;
-
-    /**
-     * If {@link #AUTO_HIDE} is set, the number of milliseconds to wait after
-     * user interaction before hiding the system UI.
-     */
-    private static final int AUTO_HIDE_DELAY_MILLIS = 3000;
-
-    /**
-     * If set, will toggle the system UI visibility upon interaction. Otherwise,
-     * will show the system UI visibility upon interaction.
-     */
-    private static final boolean TOGGLE_ON_CLICK = true;
-
 
     public void onTuneClicked(View v){
         if (flirOneDevice != null){
