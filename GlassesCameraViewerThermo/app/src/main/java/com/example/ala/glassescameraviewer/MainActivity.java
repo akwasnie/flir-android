@@ -232,7 +232,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
         orientationEventListener = new OrientationEventListener(this) {
             @Override
             public void onOrientationChanged(int orientation) {
-                deviceRotation = orientation;
+                deviceRotation = (orientation);
             }
         };
 
@@ -370,12 +370,14 @@ textPulse.setText(pulseMsg);
         super.onPause();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
+
     }
 
     public void onDestroy() {
         super.onDestroy();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
+
     }
 
     public void onCameraViewStarted(int width, int height) {
@@ -455,6 +457,8 @@ textPulse.setText(pulseMsg);
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+
+                thermalImageView.setRotation(-90);
                 thermalImageView.setImageBitmap(frame);
             }
         });
@@ -463,7 +467,6 @@ textPulse.setText(pulseMsg);
     // StreamDelegate method
     public void onFrameReceived(Frame frame){
         Log.v("ExampleApp", "Frame received!");
-
         if (currentTuningState != Device.TuningState.InProgress){
             frameProcessor.processFrame(frame);
         }
@@ -625,7 +628,7 @@ textPulse.setText(pulseMsg);
     }
         @Override
         protected void onStart(){
-            Toast.makeText(this, "aaaaa", Toast.LENGTH_LONG).show();
+
             super.onStart();
             thermalImageView = (ImageView) findViewById(R.id.imageView);
             try {
