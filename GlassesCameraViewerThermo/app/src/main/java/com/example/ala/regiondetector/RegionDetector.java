@@ -35,6 +35,7 @@ import pl.gda.pg.eti.dbe.dsp.TimeDomainFilters;
 public class RegionDetector implements EventListener {
     private final EventAggregator eventAggregator;
     private CascadeClassifier faceCascade;
+    private CascadeClassifier faceThermoCascade;
     private CascadeClassifier eyeCascade;
     private ArrayList<Double> listAvg = new ArrayList<>();
     private ArrayList<Mat> imageBuffer = new ArrayList<>();
@@ -43,6 +44,7 @@ public class RegionDetector implements EventListener {
         this.eventAggregator = eventAggregator;
         eventAggregator.addEventListener(Event.NEW_IMAGE, this);
         eventAggregator.addEventListener(Event.VISIBLE_CASCADES, this);
+        eventAggregator.addEventListener(Event.THERMO_CASCADES, this);
         eventAggregator.addEventListener(Event.NEW_IMAGE_THERMO, this);
     }
 
@@ -52,9 +54,13 @@ public class RegionDetector implements EventListener {
         if (event == Event.VISIBLE_CASCADES) {
             faceCascade = (CascadeClassifier) parameter;
             eyeCascade = (CascadeClassifier) parameter2;
+        } else if (event == Event.THERMO_CASCADES) {
+            faceThermoCascade = (CascadeClassifier) parameter;
+
         } else if (event == Event.NEW_IMAGE) {
-            Mat mat = detectRegion((Mat) parameter, faceCascade, "face");
-            mat = detectRegion(mat, eyeCascade, "eyes");
+            Mat mat = (Mat) parameter;
+           // Mat mat = detectRegion((Mat) parameter, faceCascade, "face");
+            //mat = detectRegion(mat, eyeCascade, "eyes");
             if (Config.GetColorSpace() == ColorSpace.YUV) {
                 mat = ColorUtil.RGBtoYUV(mat);
             }
@@ -62,15 +68,17 @@ public class RegionDetector implements EventListener {
             eventAggregator.triggerEvent(Event.PROCESSED_IMAGE, mat, null);
         } else if (event == Event.NEW_IMAGE_THERMO) {
             Bitmap bmp = (Bitmap) parameter;
+            System.out.println("bbbbb"+bmp.describeContents());
 
-            Mat mat = new Mat (bmp.getHeight(), bmp.getWidth(), CvType.CV_8UC1);
+            Mat mat = new Mat (176, 144, CvType.CV_8UC4);
             Utils.bitmapToMat(bmp, mat);
+            Core.flip(mat.t(), mat, 0);
 
-           // mat = detectRegion(mat, faceCascade, "face");
+            Mat resultedMat = detectRegion(mat, faceThermoCascade, "face");
            // mat = detectRegion(mat, eyeCascade, "eyes");
 
-            Bitmap resultedBmp = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888);
-            Utils.matToBitmap(mat, resultedBmp);
+            Bitmap resultedBmp = Bitmap.createBitmap(resultedMat.width(), resultedMat.height(), Bitmap.Config.ARGB_8888);
+            Utils.matToBitmap(resultedMat, resultedBmp);
 
             eventAggregator.triggerEvent(Event.PROCESSED_THERMO_IMAGE, resultedBmp, null);
         }
@@ -78,18 +86,21 @@ public class RegionDetector implements EventListener {
     }
 
     private Mat detectRegion(Mat mat, CascadeClassifier cascade, String region) {
-        if (!mat.empty()) {
+       if (!mat.empty()) {
+
+               System.out.println("aaaaaaaaa" + mat.width() + " " + mat.height() + " " + mat.type());
+
             Mat grayscale = mat.clone();
             Imgproc.cvtColor(mat, grayscale, Imgproc.COLOR_RGBA2RGB);
 
             MatOfRect regions = new MatOfRect();
 
-            // Use the classifier to detect regions
+//            // Use the classifier to detect regions
             if (cascade != null) {
                 cascade.detectMultiScale(grayscale, regions);
             }
-
-
+//
+//
             // If there are any regions found, draw a rectangle around it
             Rect[] objectArray = regions.toArray();
             if (objectArray.length > 0) {
@@ -99,22 +110,23 @@ public class RegionDetector implements EventListener {
                 ArrayList<Mat> region_channels = new ArrayList<>();
                 Core.split(submat, region_channels);
 
-//                for (int x = 0; x < region_channels.get(0).width(); x++) {
-//                    for (int y = 0; y < region_channels.get(0).height(); y++) {
-//                        if (ColorUtil.isSkin(region_channels, x, y)) {
-//                            byte[] pixel = {0, 0, 0, 0};
-//                            submat.put(y, x, pixel);
-//                        }
-//                    }
-//                }
+////                for (int x = 0; x < region_channels.get(0).width(); x++) {
+////                    for (int y = 0; y < region_channels.get(0).height(); y++) {
+////                        if (ColorUtil.isSkin(region_channels, x, y)) {
+////                            byte[] pixel = {0, 0, 0, 0};
+////                            submat.put(y, x, pixel);
+////                        }
+////                    }
+////                }
             }
             if (imageBuffer.size() > 30) {
                 calculatePulse(imageBuffer);
                 imageBuffer.clear();
             }
-        }
+       }
         return mat;
     }
+
 
     private void drawRect(Mat mat, String region, Rect[] objectArray) {
         Rect rect = new Rect(objectArray[0].tl(), objectArray[0].br());
@@ -124,10 +136,13 @@ public class RegionDetector implements EventListener {
             avg = ColorUtil.AverageForRect(mat, rect, Config.GetChannel());
             eventAggregator.triggerEvent(Event.TAIL_TO_DRAW, avg, null);
             eventAggregator.triggerEvent(Event.NEW_FACE_DETECTED, rect, null);
+            System.out.println("ccccccc"+rect);
         } else if (region.equals("eyes")) {
             rect = new Rect(rect.x, rect.y - 2 * rect.height, rect.width, rect.height);
         }
-        Imgproc.rectangle(mat, rect.tl(), rect.br(), new Scalar(0, 255, 0, 255), 3);
+        System.out.println("dddddd"+rect);
+        Imgproc.rectangle(mat, rect.tl(), rect.br(), new Scalar(0, 255, 0, 255), 5);
+
     }
 
     private void calculatePulse(ArrayList<Mat> buffer){

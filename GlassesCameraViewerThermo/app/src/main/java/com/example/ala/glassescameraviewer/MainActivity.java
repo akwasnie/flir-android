@@ -116,6 +116,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
     private EventAggregator eventAggregator;
     private CascadeClassifier faceCascadeClassifier;
     private CascadeClassifier eyeCascadeClassifier;
+    private CascadeClassifier thermoFaceClassifier;
     public BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -176,6 +177,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
 
             @Override
             public void onClick(View v) {
+               // eventAggregator.triggerEvent(Event.NEW_IMAGE_THERMO, thermo_frame, null);
                 Config.SetColorSpace(ColorSpace.RGB);
             }
         });
@@ -284,6 +286,8 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
         faceCascadeClassifier = initializeOpenCVDependencies(R.raw.lbpcascade_frontalface, "lbpcascade_frontalface.xml");
         eyeCascadeClassifier = initializeOpenCVDependencies(R.raw.haarcascade_mcs_eyepair_big, "haarcascade_mcs_eyepair_big.xml");
         eventAggregator.triggerEvent(Event.VISIBLE_CASCADES, faceCascadeClassifier, eyeCascadeClassifier);
+        thermoFaceClassifier = initializeOpenCVDependencies(R.raw.thermo_face, "thermo_face.xml");
+        eventAggregator.triggerEvent(Event.THERMO_CASCADES, thermoFaceClassifier, null);
 
     }
 
@@ -484,7 +488,7 @@ textPulse.setText(pulseMsg);
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                thermalImageView.setRotation(-90);
+               // b thermalImageView.setRotation(-90);
                 thermalImageView.setImageBitmap(imageToPresent);
             }
         });
