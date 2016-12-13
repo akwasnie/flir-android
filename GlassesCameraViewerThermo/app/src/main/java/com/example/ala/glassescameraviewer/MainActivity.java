@@ -244,13 +244,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
 
         buttonConfig = (Button) findViewById(R.id.config);
 
-
-
-
-
-
-
-
+        // Flir One.
         HashMap<Integer, String> imageTypeNames = new HashMap<>();
         // Massage the type names for display purposes and skip any deprecated
         for (Field field : RenderedImage.ImageType.class.getDeclaredFields()){
@@ -268,9 +262,6 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
 
         RenderedImage.ImageType defaultImageType = RenderedImage.ImageType.BlendedMSXRGBA8888Image;
         frameProcessor = new FrameProcessor(this, this, EnumSet.of(defaultImageType, RenderedImage.ImageType.ThermalRadiometricKelvinImage));
-
-
-
 
         orientationEventListener = new OrientationEventListener(this) {
             @Override
@@ -322,6 +313,17 @@ public class MainActivity extends AppCompatActivity implements EventListener, Ca
     {
         super.onResume();
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_1_0, this, mLoaderCallback);
+        if (flirOneDevice != null){
+            flirOneDevice.startFrameStream(this);
+        }
+    }
+    @Override
+    public void onStop() {
+        // We must unregister our usb receiver, otherwise we will steal events from other apps
+        Log.e("PreviewActivity", "onStop, stopping discovery!");
+        Device.stopDiscovery();
+        flirOneDevice = null;
+        super.onStop();
     }
 
     @Override
@@ -398,6 +400,9 @@ textPulse.setText(pulseMsg);
         super.onPause();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
+        if (flirOneDevice != null){
+            flirOneDevice.stopFrameStream();
+        }
 
     }
 

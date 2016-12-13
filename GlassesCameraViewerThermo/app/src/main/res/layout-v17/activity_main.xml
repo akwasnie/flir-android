@@ -42,13 +42,13 @@
                     android:layout_height="fill_parent"
                     android:id="@+id/imageView"
                     android:layout_alignParentStart="true"
-                    android:layout_above="@+id/graphView1"
                     android:background="@color/dim_foreground_disabled_material_dark"
-                    android:layout_alignParentTop="true" />
+                    android:layout_alignParentTop="true"
+                    android:layout_above="@+id/graphView1" />
 
                 <com.jjoe64.graphview.GraphView
                     android:layout_width="match_parent"
-                    android:layout_height="150dp"
+                    android:layout_height="200dp"
                     android:id="@+id/graphView1"
                     android:layout_alignParentBottom="true"
                     android:layout_alignParentStart="true" />
@@ -161,7 +161,6 @@
                         android:layout_height="wrap_content"
                         android:text="New Button"
                         android:id="@+id/config"
-                        android:layout_above="@+id/button"
                         android:layout_alignParentLeft="true"
                         android:layout_alignParentStart="true"
                         android:onClick="openConfig"/>
